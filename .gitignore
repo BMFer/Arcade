@@ -405,3 +405,5 @@ desktop.ini
 
 # JetBrains IDEs
 .idea/
+
+prompt*.md
