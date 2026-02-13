@@ -161,6 +161,7 @@ The bot will log in and appear online in your Discord server. If a Guild ID is c
 | Command | Description |
 |---------|-------------|
 | `/ping` | Check if the bot is alive |
+| `/heist-help` | Show how-to-play instructions |
 | `/heist-init` | Initialize the tower — creates roles, categories, and channels (admin only) |
 | `/heist-teardown` | Tear down the tower — deletes all tower roles, categories, and channels (admin only) |
 | `/heist-start` | Create a lobby and start a heist after countdown (requires initialized tower) |

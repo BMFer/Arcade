@@ -288,6 +288,24 @@ public class GameEmbedsTests
         Assert.That(embed.Description, Does.Contain("x2"));
     }
 
+    // --- HelpEmbed ---
+
+    [Test]
+    public void HelpEmbed_TitleIsHowToPlay()
+    {
+        var embed = GameEmbeds.HelpEmbed();
+        Assert.That(embed.Title, Is.EqualTo("How to Play — Heist Tower"));
+    }
+
+    [Test]
+    public void HelpEmbed_HasGameplayAndCardsFields()
+    {
+        var embed = GameEmbeds.HelpEmbed();
+        Assert.That(embed.Fields.Any(f => f.Name == "Gameplay"), Is.True);
+        Assert.That(embed.Fields.Any(f => f.Name == "Power Cards"), Is.True);
+        Assert.That(embed.Fields.Any(f => f.Name == "Commands"), Is.True);
+    }
+
     // --- AssistantSelectionEmbed ---
 
     [Test]

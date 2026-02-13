@@ -169,6 +169,49 @@ public static class GameEmbeds
             .Build();
     }
 
+    public static Embed HelpEmbed()
+    {
+        return new EmbedBuilder()
+            .WithTitle("How to Play — Heist Tower")
+            .WithDescription(
+                "Race to the top of a 5-level tower by solving word scrambles! " +
+                "Each level has **3 rooms**, each with its own puzzle. Solve all 3 to advance to the next level. " +
+                "First player to clear all rooms of the **Crown Room** wins.")
+            .WithColor(Color.Blue)
+            .AddField("Gameplay",
+                "- A scrambled word appears in your room's channel\n" +
+                "- Type the unscrambled answer to advance\n" +
+                "- Each level has 3 rooms — solve them in order\n" +
+                "- After room 3, you move to room 1 of the next level", false)
+            .AddField("Wrong Answers",
+                "- 1 wrong guess: drop **1 level** (back to room 1) + cooldown\n" +
+                "- 2 wrong in a row: drop **2 levels** (back to room 1) + cooldown\n" +
+                "- You lose all room progress when you drop!", false)
+            .AddField("Power Cards",
+                "Every **3 rooms** cleared, you earn a random card:\n" +
+                "- **Knockback** — Push a player down 1 level\n" +
+                "- **Shield** — Block the next knockback\n" +
+                "- **Spy** — Reveal a letter of your puzzle\n" +
+                "- **Freeze** — Freeze a player for 60 seconds\n" +
+                "- **Chaos** — Re-scramble another player's puzzle\n" +
+                "- **Hint** — Get first/last letter clue", false)
+            .AddField("Commands",
+                "`/heist-start` — Create a lobby\n" +
+                "`/heist-join` — Join the lobby or an active heist\n" +
+                "`/heist-leave` — Leave the lobby\n" +
+                "`/heist-status` — See who's on which level\n" +
+                "`/heist-cards` — View your card inventory\n" +
+                "`/use-card <card> [target]` — Play a power card\n" +
+                "`/choose-assistant` — Pick an AI companion\n" +
+                "`/ask-assistant <question>` — Ask your AI a question", false)
+            .AddField("Tips",
+                "- Don't guess randomly — two wrong in a row costs you 2 levels\n" +
+                "- Save Knockback for when opponents are near the top\n" +
+                "- Shield up when you're deep into levels 4-5\n" +
+                "- Freeze can lock someone out for a full minute", false)
+            .Build();
+    }
+
     private static Color GetLevelColor(int level) => level switch
     {
         1 => Color.Green,

@@ -211,6 +211,12 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
         await RespondAsync(embed: GameEmbeds.CardInventoryEmbed(player), ephemeral: true);
     }
 
+    [SlashCommand("heist-help", "Learn how to play Heist Tower.")]
+    public async Task HelpAsync()
+    {
+        await RespondAsync(embed: GameEmbeds.HelpEmbed());
+    }
+
     [SlashCommand("ping", "Check if the bot is alive.")]
     public async Task PingAsync()
     {
