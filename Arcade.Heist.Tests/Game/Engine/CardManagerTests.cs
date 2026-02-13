@@ -68,11 +68,13 @@ public class CardManagerTests
         user.Cards.Add(PowerCard.Knockback);
         var target = MakePlayer(2);
         target.CurrentLevel = 3;
+        target.CurrentRoom = 2;
 
         var result = _cardManager.UseKnockback(user, target, 5);
 
         Assert.That(result.Success, Is.True);
         Assert.That(target.CurrentLevel, Is.EqualTo(2));
+        Assert.That(target.CurrentRoom, Is.EqualTo(1));
         Assert.That(result.TargetMoved, Is.True);
     }
 
@@ -99,11 +101,29 @@ public class CardManagerTests
         user.Cards.Add(PowerCard.Knockback);
         var target = MakePlayer(2);
         target.CurrentLevel = 1;
+        target.CurrentRoom = 1;
 
         var result = _cardManager.UseKnockback(user, target, 5);
 
         Assert.That(target.CurrentLevel, Is.EqualTo(1));
+        Assert.That(target.CurrentRoom, Is.EqualTo(1));
         Assert.That(result.TargetMoved, Is.False);
+    }
+
+    [Test]
+    public void UseKnockback_AtLevel1Room2_ResetsToRoom1()
+    {
+        var user = MakePlayer();
+        user.Cards.Add(PowerCard.Knockback);
+        var target = MakePlayer(2);
+        target.CurrentLevel = 1;
+        target.CurrentRoom = 2;
+
+        var result = _cardManager.UseKnockback(user, target, 5);
+
+        Assert.That(target.CurrentLevel, Is.EqualTo(1));
+        Assert.That(target.CurrentRoom, Is.EqualTo(1));
+        Assert.That(result.TargetMoved, Is.True);
     }
 
     [Test]
@@ -203,8 +223,9 @@ public class CardManagerTests
         user.Cards.Add(PowerCard.Chaos);
         var target = MakePlayer(2);
         target.CurrentLevel = 1;
+        target.CurrentRoom = 1;
         var puzzle = new Puzzle { OriginalWord = "treasure", ScrambledWord = "ertasure", DifficultyTier = 3 };
-        var puzzles = new Dictionary<int, Puzzle> { [1] = puzzle };
+        var puzzles = new Dictionary<(int Level, int Room), Puzzle> { [(1, 1)] = puzzle };
 
         var result = _cardManager.UseChaos(user, target, puzzles, _puzzleManager);
 
@@ -220,7 +241,8 @@ public class CardManagerTests
         user.Cards.Add(PowerCard.Chaos);
         var target = MakePlayer(2);
         target.CurrentLevel = 1;
-        var puzzles = new Dictionary<int, Puzzle>();
+        target.CurrentRoom = 1;
+        var puzzles = new Dictionary<(int Level, int Room), Puzzle>();
 
         var result = _cardManager.UseChaos(user, target, puzzles, _puzzleManager);
 
@@ -258,6 +280,7 @@ public class CardManagerTests
     {
         UserId = id,
         DisplayName = $"Player{id}",
-        CurrentLevel = 1
+        CurrentLevel = 1,
+        CurrentRoom = 1
     };
 }

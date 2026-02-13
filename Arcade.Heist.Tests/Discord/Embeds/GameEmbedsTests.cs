@@ -11,18 +11,19 @@ public class GameEmbedsTests
     // --- PuzzleEmbed ---
 
     [Test]
-    public void PuzzleEmbed_TitleContainsLevel()
+    public void PuzzleEmbed_TitleContainsLevelAndRoom()
     {
         var puzzle = MakePuzzle();
-        var embed = GameEmbeds.PuzzleEmbed(puzzle, 3);
+        var embed = GameEmbeds.PuzzleEmbed(puzzle, 3, 2);
         Assert.That(embed.Title, Does.Contain("Level 3"));
+        Assert.That(embed.Title, Does.Contain("Room 2"));
     }
 
     [Test]
     public void PuzzleEmbed_DescriptionContainsUppercasedScramble()
     {
         var puzzle = MakePuzzle("gold", "dlgo");
-        var embed = GameEmbeds.PuzzleEmbed(puzzle, 1);
+        var embed = GameEmbeds.PuzzleEmbed(puzzle, 1, 1);
         Assert.That(embed.Description, Does.Contain("DLGO"));
     }
 
@@ -30,7 +31,7 @@ public class GameEmbedsTests
     public void PuzzleEmbed_Tier5_HasDoubleScrambleField()
     {
         var puzzle = new Puzzle { OriginalWord = "crown jewels", ScrambledWord = "nwocr slweje", DifficultyTier = 5 };
-        var embed = GameEmbeds.PuzzleEmbed(puzzle, 5);
+        var embed = GameEmbeds.PuzzleEmbed(puzzle, 5, 1);
         Assert.That(embed.Fields.Any(f => f.Name == "Mode" && f.Value.Contains("Double Scramble")), Is.True);
     }
 
@@ -38,7 +39,7 @@ public class GameEmbedsTests
     public void PuzzleEmbed_Tier1_NoDoubleScrambleField()
     {
         var puzzle = MakePuzzle();
-        var embed = GameEmbeds.PuzzleEmbed(puzzle, 1);
+        var embed = GameEmbeds.PuzzleEmbed(puzzle, 1, 1);
         Assert.That(embed.Fields.Any(f => f.Name == "Mode"), Is.False);
     }
 
@@ -48,9 +49,10 @@ public class GameEmbedsTests
     public void CorrectAnswerEmbed_TitleIsCorrect()
     {
         var player = MakePlayer();
-        player.CurrentLevel = 2;
+        player.CurrentLevel = 1;
+        player.CurrentRoom = 2;
         var puzzle = MakePuzzle();
-        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, null);
+        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, 1, null);
         Assert.That(embed.Title, Is.EqualTo("Correct!"));
     }
 
@@ -58,10 +60,24 @@ public class GameEmbedsTests
     public void CorrectAnswerEmbed_HasAdvancingField()
     {
         var player = MakePlayer();
-        player.CurrentLevel = 2;
+        player.CurrentLevel = 1;
+        player.CurrentRoom = 2;
         var puzzle = MakePuzzle();
-        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, null);
+        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, 1, null);
         Assert.That(embed.Fields.Any(f => f.Name == "Advancing"), Is.True);
+    }
+
+    [Test]
+    public void CorrectAnswerEmbed_ShowsRoomProgression()
+    {
+        var player = MakePlayer();
+        player.CurrentLevel = 1;
+        player.CurrentRoom = 2;
+        var puzzle = MakePuzzle();
+        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, 1, null);
+        var advField = embed.Fields.First(f => f.Name == "Advancing");
+        Assert.That(advField.Value, Does.Contain("L1 Room 1"));
+        Assert.That(advField.Value, Does.Contain("L1 Room 2"));
     }
 
     [Test]
@@ -69,8 +85,9 @@ public class GameEmbedsTests
     {
         var player = MakePlayer();
         player.CurrentLevel = 2;
+        player.CurrentRoom = 1;
         var puzzle = MakePuzzle();
-        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, PowerCard.Shield);
+        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, 3, PowerCard.Shield);
         Assert.That(embed.Fields.Any(f => f.Name == "Card Earned!"), Is.True);
     }
 
@@ -78,9 +95,10 @@ public class GameEmbedsTests
     public void CorrectAnswerEmbed_NoCard_NoCardField()
     {
         var player = MakePlayer();
-        player.CurrentLevel = 2;
+        player.CurrentLevel = 1;
+        player.CurrentRoom = 2;
         var puzzle = MakePuzzle();
-        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, null);
+        var embed = GameEmbeds.CorrectAnswerEmbed(player, puzzle, 1, 1, null);
         Assert.That(embed.Fields.Any(f => f.Name == "Card Earned!"), Is.False);
     }
 
@@ -102,6 +120,17 @@ public class GameEmbedsTests
         player.CooldownExpiry = DateTimeOffset.UtcNow.AddSeconds(10);
         var embed = GameEmbeds.WrongAnswerEmbed(player, 2);
         Assert.That(embed.Fields.Any(f => f.Name == "Penalty"), Is.True);
+    }
+
+    [Test]
+    public void WrongAnswerEmbed_PenaltyMentionsRoom1()
+    {
+        var player = MakePlayer();
+        player.CurrentRoom = 1;
+        player.CooldownExpiry = DateTimeOffset.UtcNow.AddSeconds(10);
+        var embed = GameEmbeds.WrongAnswerEmbed(player, 2);
+        var penaltyField = embed.Fields.First(f => f.Name == "Penalty");
+        Assert.That(penaltyField.Value, Does.Contain("room 1"));
     }
 
     [Test]
@@ -146,9 +175,19 @@ public class GameEmbedsTests
     {
         var player = MakePlayer();
         player.WrongGuessCount = 3;
-        player.LevelsCleared = 5;
+        player.RoomsCleared = 15;
         var embed = GameEmbeds.WinEmbed(player);
         Assert.That(embed.Fields.Any(f => f.Name == "Stats"), Is.True);
+    }
+
+    [Test]
+    public void WinEmbed_StatsContainsRoomsCleared()
+    {
+        var player = MakePlayer();
+        player.RoomsCleared = 15;
+        var embed = GameEmbeds.WinEmbed(player);
+        var statsField = embed.Fields.First(f => f.Name == "Stats");
+        Assert.That(statsField.Value, Does.Contain("Rooms cleared: 15"));
     }
 
     // --- LobbyEmbed ---
@@ -175,6 +214,15 @@ public class GameEmbedsTests
         Assert.That(embed.Fields.Any(f => f.Value.Contains("TestPlayer")), Is.True);
     }
 
+    // --- PlayerJoinedEmbed ---
+
+    [Test]
+    public void PlayerJoinedEmbed_MentionsRoom1()
+    {
+        var embed = GameEmbeds.PlayerJoinedEmbed("Alice");
+        Assert.That(embed.Description, Does.Contain("Room 1"));
+    }
+
     // --- StatusEmbed ---
 
     [Test]
@@ -186,15 +234,15 @@ public class GameEmbedsTests
     }
 
     [Test]
-    public void StatusEmbed_Active_GroupsByLevel()
+    public void StatusEmbed_Active_ShowsRoomInfo()
     {
         var game = new GameState
         {
             Status = GameStatus.Active,
             Players = new Dictionary<ulong, PlayerState>
             {
-                [1] = new() { UserId = 1, DisplayName = "Alice", CurrentLevel = 2 },
-                [2] = new() { UserId = 2, DisplayName = "Bob", CurrentLevel = 2 }
+                [1] = new() { UserId = 1, DisplayName = "Alice", CurrentLevel = 2, CurrentRoom = 2 },
+                [2] = new() { UserId = 2, DisplayName = "Bob", CurrentLevel = 2, CurrentRoom = 1 }
             },
             Levels =
             [
@@ -204,6 +252,9 @@ public class GameEmbedsTests
         };
         var embed = GameEmbeds.StatusEmbed(game);
         Assert.That(embed.Fields.Any(f => f.Name.Contains("Ground Floor")), Is.True);
+        var field = embed.Fields.First(f => f.Name.Contains("Ground Floor"));
+        Assert.That(field.Value, Does.Contain("(R2)"));
+        Assert.That(field.Value, Does.Contain("(R1)"));
     }
 
     // --- CardUsedEmbed ---
@@ -270,6 +321,7 @@ public class GameEmbedsTests
     {
         UserId = 1,
         DisplayName = "TestPlayer",
-        CurrentLevel = 1
+        CurrentLevel = 1,
+        CurrentRoom = 1
     };
 }

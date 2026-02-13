@@ -22,17 +22,25 @@ public class PlayerManager
         {
             UserId = userId,
             DisplayName = displayName,
-            CurrentLevel = 1
+            CurrentLevel = 1,
+            CurrentRoom = 1
         };
     }
 
     public void AdvancePlayer(PlayerState player)
     {
-        player.CurrentLevel++;
-        player.ConsecutiveWrongCount = 0;
-        player.LevelsCleared++;
+        player.CurrentRoom++;
+        if (player.CurrentRoom > _options.RoomsPerLevel)
+        {
+            player.CurrentRoom = 1;
+            player.CurrentLevel++;
+        }
 
-        _logger.LogInformation("Player {Player} advanced to level {Level}", player.DisplayName, player.CurrentLevel);
+        player.ConsecutiveWrongCount = 0;
+        player.RoomsCleared++;
+
+        _logger.LogInformation("Player {Player} advanced to level {Level} room {Room}",
+            player.DisplayName, player.CurrentLevel, player.CurrentRoom);
     }
 
     public void PenalizePlayer(PlayerState player)
@@ -42,18 +50,19 @@ public class PlayerManager
 
         int dropLevels = player.ConsecutiveWrongCount >= 2 ? 2 : 1;
         player.CurrentLevel = Math.Max(1, player.CurrentLevel - dropLevels);
+        player.CurrentRoom = 1;
         player.CooldownExpiry = DateTimeOffset.UtcNow.AddSeconds(_options.WrongGuessCooldownSeconds);
 
         if (player.ConsecutiveWrongCount >= 2)
             player.ConsecutiveWrongCount = 0; // Reset after double penalty
 
-        _logger.LogInformation("Player {Player} penalized, dropped {Drop} level(s) to level {Level}",
+        _logger.LogInformation("Player {Player} penalized, dropped {Drop} level(s) to level {Level} room 1",
             player.DisplayName, dropLevels, player.CurrentLevel);
     }
 
     public bool ShouldAwardCard(PlayerState player)
     {
-        return player.LevelsCleared > 0 && player.LevelsCleared % _options.CardAwardInterval == 0;
+        return player.RoomsCleared > 0 && player.RoomsCleared % _options.CardAwardInterval == 0;
     }
 
     public void ApplyCooldown(PlayerState player, int seconds)

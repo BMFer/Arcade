@@ -44,6 +44,12 @@ public class HeistOptionsTests
     }
 
     [Test]
+    public void RoomsPerLevel_Default3()
+    {
+        Assert.That(_options.RoomsPerLevel, Is.EqualTo(3));
+    }
+
+    [Test]
     public void MaxLevels_Default5()
     {
         Assert.That(_options.MaxLevels, Is.EqualTo(5));

@@ -58,6 +58,53 @@ public class GameManager
         return true;
     }
 
+    public async Task<(bool Success, LevelInfo? Level)> JoinGameAsync(ulong userId, string displayName, SocketGuild guild)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            if (_game.Status != GameStatus.Active)
+                return (false, null);
+            if (_game.Players.ContainsKey(userId))
+                return (false, null);
+
+            var player = _playerManager.CreatePlayer(userId, displayName);
+            player.CurrentLevel = 1;
+            player.CurrentRoom = 1;
+            _game.Players[userId] = player;
+
+            var level1 = _game.Levels.FirstOrDefault(l => l.LevelNumber == 1);
+            if (level1 == null)
+                return (false, null);
+
+            var room1 = GetRoomInfo(1, 1);
+            if (room1 == null)
+                return (false, null);
+
+            await _towerManager.PlacePlayerAtRoomAsync(guild, userId, room1);
+
+            var channel = guild.GetTextChannel(room1.ChannelId);
+            if (channel != null)
+            {
+                await channel.SendMessageAsync(embed: GameEmbeds.PlayerJoinedEmbed(displayName));
+
+                if (_game.ActivePuzzles.TryGetValue((1, 1), out var puzzle))
+                    await channel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(puzzle, 1, 1));
+            }
+
+            _assistantService.CommentOnEvent(
+                $"{displayName} has joined the heist mid-game and is starting at Level 1 Room 1!",
+                userId, room1.ChannelId, HeistGameContext.Format(player));
+
+            _logger.LogInformation("Player {Name} joined mid-game at Level 1 Room 1", displayName);
+            return (true, level1);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     public bool LeaveLobby(ulong userId)
     {
         if (_game.Status != GameStatus.Lobby)
@@ -90,32 +137,39 @@ public class GameManager
             _game.Status = GameStatus.Active;
             _game.Levels = levels;
 
-            // Place all players at level 1 and generate initial puzzles
-            var level1 = _game.Levels[0];
+            // Place all players at level 1, room 1
+            var room1 = GetRoomInfo(1, 1);
+            if (room1 == null)
+                return false;
+
             foreach (var player in _game.Players.Values)
             {
                 player.CurrentLevel = 1;
-                await _towerManager.PlacePlayerAtLevelAsync(guild, player.UserId, level1);
+                player.CurrentRoom = 1;
+                await _towerManager.PlacePlayerAtRoomAsync(guild, player.UserId, room1);
             }
 
-            // Generate puzzles for all levels
+            // Generate puzzles for all rooms on all levels
             foreach (var level in _game.Levels)
             {
-                var puzzle = _puzzleManager.GeneratePuzzle(level.LevelNumber);
-                _game.ActivePuzzles[level.LevelNumber] = puzzle;
+                foreach (var room in level.Rooms)
+                {
+                    var puzzle = _puzzleManager.GeneratePuzzle(level.LevelNumber);
+                    _game.ActivePuzzles[(level.LevelNumber, room.RoomNumber)] = puzzle;
+                }
             }
 
-            // Post the first puzzle in level 1's channel
-            var channel = guild.GetTextChannel(level1.ChannelId);
+            // Post the first puzzle in level 1 room 1's channel
+            var channel = guild.GetTextChannel(room1.ChannelId);
             if (channel != null)
             {
-                var puzzle = _game.ActivePuzzles[1];
-                await channel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(puzzle, 1));
+                var puzzle = _game.ActivePuzzles[(1, 1)];
+                await channel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(puzzle, 1, 1));
             }
 
             // Fire proactive commentary for game start
             foreach (var p in _game.Players.Values)
-                _assistantService.CommentOnEvent("The heist has begun! Players are entering the tower at Level 1.", p.UserId, level1.ChannelId, HeistGameContext.Format(p));
+                _assistantService.CommentOnEvent("The heist has begun! Players are entering the tower at Level 1 Room 1.", p.UserId, room1.ChannelId, HeistGameContext.Format(p));
 
             _logger.LogInformation("Game started with {Count} players", _game.Players.Count);
             return true;
@@ -137,13 +191,13 @@ public class GameManager
             if (!_game.Players.TryGetValue(userId, out var player))
                 return;
 
-            // Find the level for this channel
-            var level = _game.Levels.FirstOrDefault(l => l.ChannelId == channelId);
-            if (level == null)
+            // Find the level and room for this channel
+            var (level, room) = FindLevelAndRoom(channelId);
+            if (level == null || room == null)
                 return;
 
-            // Player must be on this level
-            if (player.CurrentLevel != level.LevelNumber)
+            // Player must be on this level and room
+            if (player.CurrentLevel != level.LevelNumber || player.CurrentRoom != room.RoomNumber)
                 return;
 
             // Check cooldown
@@ -159,7 +213,8 @@ public class GameManager
             }
 
             // Check answer
-            if (!_game.ActivePuzzles.TryGetValue(level.LevelNumber, out var puzzle))
+            var puzzleKey = (level.LevelNumber, room.RoomNumber);
+            if (!_game.ActivePuzzles.TryGetValue(puzzleKey, out var puzzle))
                 return;
 
             var textChannel = guild.GetTextChannel(channelId);
@@ -171,6 +226,7 @@ public class GameManager
                 puzzle.SolvedByUserId = userId;
 
                 var oldLevel = player.CurrentLevel;
+                var oldRoom = player.CurrentRoom;
                 _playerManager.AdvancePlayer(player);
 
                 // Check for card award
@@ -183,21 +239,21 @@ public class GameManager
 
                 // Announce in current room
                 if (textChannel != null)
-                    await textChannel.SendMessageAsync(embed: GameEmbeds.CorrectAnswerEmbed(player, puzzle, oldLevel, awardedCard));
+                    await textChannel.SendMessageAsync(embed: GameEmbeds.CorrectAnswerEmbed(player, puzzle, oldLevel, oldRoom, awardedCard));
 
-                // Fire proactive commentary for correct answer
-                var correctEvent = $"{player.DisplayName} solved the puzzle '{puzzle.OriginalWord}' and advanced from level {oldLevel} to level {player.CurrentLevel}!";
+                // Fire proactive commentary
+                var correctEvent = $"{player.DisplayName} solved the puzzle '{puzzle.OriginalWord}' and advanced from level {oldLevel} room {oldRoom} to level {player.CurrentLevel} room {player.CurrentRoom}!";
                 if (awardedCard.HasValue)
                     correctEvent += $" They also earned a {awardedCard.Value} card!";
                 _assistantService.CommentOnEvent(correctEvent, player.UserId, channelId, HeistGameContext.Format(player));
 
-                // Generate new puzzle for this room
+                // Generate new puzzle for the solved room
                 var newPuzzle = _puzzleManager.GeneratePuzzle(level.LevelNumber);
-                _game.ActivePuzzles[level.LevelNumber] = newPuzzle;
+                _game.ActivePuzzles[puzzleKey] = newPuzzle;
 
-                // Post new puzzle
+                // Post new puzzle in the solved room
                 if (textChannel != null)
-                    await textChannel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(newPuzzle, level.LevelNumber));
+                    await textChannel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(newPuzzle, level.LevelNumber, room.RoomNumber));
 
                 // Check if player won
                 if (_playerManager.HasWon(player, _options.MaxLevels))
@@ -214,7 +270,6 @@ public class GameManager
                     if (textChannel != null)
                         await textChannel.SendMessageAsync(embed: GameEmbeds.WinEmbed(player));
 
-                    // Fire proactive commentary for game won
                     _assistantService.CommentOnEvent($"{player.DisplayName} has cleared the Crown Room and won the heist!", player.UserId, _game.LobbyChannelId, HeistGameContext.Format(player));
 
                     // Strip roles after a delay, tower structure stays
@@ -229,23 +284,25 @@ public class GameManager
                     return;
                 }
 
-                // Move player to next level
-                var nextLevel = _game.Levels.FirstOrDefault(l => l.LevelNumber == player.CurrentLevel);
-                if (nextLevel != null)
+                // Move player to next room
+                var newRoomInfo = GetRoomInfo(player.CurrentLevel, player.CurrentRoom);
+                var oldRoomInfo = GetRoomInfo(oldLevel, oldRoom);
+                if (newRoomInfo != null && oldRoomInfo != null)
                 {
-                    await _towerManager.MovePlayerAsync(guild, userId, level, nextLevel);
+                    await _towerManager.MovePlayerToRoomAsync(guild, userId, oldRoomInfo, newRoomInfo);
 
-                    // Post puzzle in the new level's channel if not already there
-                    var nextChannel = guild.GetTextChannel(nextLevel.ChannelId);
+                    // Post puzzle in the new room's channel
+                    var nextChannel = guild.GetTextChannel(newRoomInfo.ChannelId);
                     if (nextChannel != null)
                     {
-                        if (!_game.ActivePuzzles.ContainsKey(nextLevel.LevelNumber))
+                        var nextKey = (player.CurrentLevel, player.CurrentRoom);
+                        if (!_game.ActivePuzzles.ContainsKey(nextKey))
                         {
-                            var nextPuzzle = _puzzleManager.GeneratePuzzle(nextLevel.LevelNumber);
-                            _game.ActivePuzzles[nextLevel.LevelNumber] = nextPuzzle;
+                            var nextPuzzle = _puzzleManager.GeneratePuzzle(player.CurrentLevel);
+                            _game.ActivePuzzles[nextKey] = nextPuzzle;
                         }
                         await nextChannel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(
-                            _game.ActivePuzzles[nextLevel.LevelNumber], nextLevel.LevelNumber));
+                            _game.ActivePuzzles[nextKey], player.CurrentLevel, player.CurrentRoom));
                     }
                 }
             }
@@ -253,30 +310,33 @@ public class GameManager
             {
                 // Wrong answer
                 var oldLevel = player.CurrentLevel;
+                var oldRoom = player.CurrentRoom;
                 _playerManager.PenalizePlayer(player);
 
                 if (textChannel != null)
                     await textChannel.SendMessageAsync(embed: GameEmbeds.WrongAnswerEmbed(player, oldLevel));
 
-                // Fire proactive commentary for wrong answer
+                // Fire proactive commentary
                 var dropLevels = oldLevel - player.CurrentLevel;
-                _assistantService.CommentOnEvent($"{player.DisplayName} guessed wrong and dropped {dropLevels} level(s) to level {player.CurrentLevel}.", player.UserId, channelId, HeistGameContext.Format(player));
+                _assistantService.CommentOnEvent($"{player.DisplayName} guessed wrong and dropped {dropLevels} level(s) to level {player.CurrentLevel} room 1.", player.UserId, channelId, HeistGameContext.Format(player));
 
-                // Move player down if level changed
-                if (player.CurrentLevel != oldLevel)
+                // Move player down if position changed
+                if (player.CurrentLevel != oldLevel || player.CurrentRoom != oldRoom)
                 {
-                    var newLevel = _game.Levels.FirstOrDefault(l => l.LevelNumber == player.CurrentLevel);
-                    if (newLevel != null)
+                    var newRoomInfo = GetRoomInfo(player.CurrentLevel, player.CurrentRoom);
+                    var oldRoomInfo = GetRoomInfo(oldLevel, oldRoom);
+                    if (newRoomInfo != null && oldRoomInfo != null)
                     {
-                        await _towerManager.MovePlayerAsync(guild, userId, level, newLevel);
+                        await _towerManager.MovePlayerToRoomAsync(guild, userId, oldRoomInfo, newRoomInfo);
 
-                        // Post puzzle in the new (lower) level channel
-                        var newChannel = guild.GetTextChannel(newLevel.ChannelId);
+                        // Post puzzle in the new (lower) room channel
+                        var newChannel = guild.GetTextChannel(newRoomInfo.ChannelId);
                         if (newChannel != null)
                         {
-                            if (_game.ActivePuzzles.TryGetValue(newLevel.LevelNumber, out var existingPuzzle))
+                            var newKey = (player.CurrentLevel, player.CurrentRoom);
+                            if (_game.ActivePuzzles.TryGetValue(newKey, out var existingPuzzle))
                             {
-                                await newChannel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(existingPuzzle, newLevel.LevelNumber));
+                                await newChannel.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(existingPuzzle, player.CurrentLevel, player.CurrentRoom));
                             }
                         }
                     }
@@ -328,20 +388,21 @@ public class GameManager
                     // Handle knockback movement
                     if (card == PowerCard.Knockback && result.TargetMoved)
                     {
-                        var oldLevel = _game.Levels.First(l => l.LevelNumber == result.TargetNewLevel + 1);
-                        var newLevel = _game.Levels.First(l => l.LevelNumber == result.TargetNewLevel);
-                        await _towerManager.MovePlayerAsync(guild, targetUserId.Value, oldLevel, newLevel);
+                        var oldRoomInfo = GetRoomInfo(result.TargetOldLevel, result.TargetOldRoom);
+                        var newRoomInfo = GetRoomInfo(result.TargetNewLevel, result.TargetNewRoom);
+                        if (oldRoomInfo != null && newRoomInfo != null)
+                            await _towerManager.MovePlayerToRoomAsync(guild, targetUserId.Value, oldRoomInfo, newRoomInfo);
                     }
 
                     // If chaos, post new puzzle in target's channel
                     if (card == PowerCard.Chaos && result.NewPuzzle != null)
                     {
-                        var targetLevel = _game.Levels.FirstOrDefault(l => l.LevelNumber == target.CurrentLevel);
-                        if (targetLevel != null)
+                        var targetRoom = GetRoomInfo(target.CurrentLevel, target.CurrentRoom);
+                        if (targetRoom != null)
                         {
-                            var ch = guild.GetTextChannel(targetLevel.ChannelId);
+                            var ch = guild.GetTextChannel(targetRoom.ChannelId);
                             if (ch != null)
-                                await ch.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(result.NewPuzzle, targetLevel.LevelNumber));
+                                await ch.SendMessageAsync(embed: GameEmbeds.PuzzleEmbed(result.NewPuzzle, target.CurrentLevel, target.CurrentRoom));
                         }
                     }
                     break;
@@ -351,12 +412,12 @@ public class GameManager
                     break;
 
                 case PowerCard.Spy:
-                    _game.ActivePuzzles.TryGetValue(player.CurrentLevel, out var spyPuzzle);
+                    _game.ActivePuzzles.TryGetValue((player.CurrentLevel, player.CurrentRoom), out var spyPuzzle);
                     result = _cardManager.UseSpy(player, spyPuzzle, _puzzleManager);
                     break;
 
                 case PowerCard.Hint:
-                    _game.ActivePuzzles.TryGetValue(player.CurrentLevel, out var hintPuzzle);
+                    _game.ActivePuzzles.TryGetValue((player.CurrentLevel, player.CurrentRoom), out var hintPuzzle);
                     result = _cardManager.UseHint(player, hintPuzzle, _puzzleManager);
                     break;
 
@@ -375,9 +436,9 @@ public class GameManager
                 // Fire proactive commentary for card effects on the target
                 if (targetUserId != null && _game.Players.TryGetValue(targetUserId.Value, out var cardTarget))
                 {
-                    var targetLevel = _game.Levels.FirstOrDefault(l => l.LevelNumber == cardTarget.CurrentLevel);
-                    if (targetLevel != null)
-                        _assistantService.CommentOnEvent(result.Message, cardTarget.UserId, targetLevel.ChannelId, HeistGameContext.Format(cardTarget));
+                    var targetRoom = GetRoomInfo(cardTarget.CurrentLevel, cardTarget.CurrentRoom);
+                    if (targetRoom != null)
+                        _assistantService.CommentOnEvent(result.Message, cardTarget.UserId, targetRoom.ChannelId, HeistGameContext.Format(cardTarget));
                 }
             }
 
@@ -410,6 +471,24 @@ public class GameManager
     public bool IsGameChannel(ulong channelId)
     {
         return _game.Status == GameStatus.Active &&
-               _game.Levels.Any(l => l.ChannelId == channelId);
+               _game.Levels.Any(l => l.Rooms.Any(r => r.ChannelId == channelId));
+    }
+
+    private RoomInfo? GetRoomInfo(int level, int room)
+    {
+        return _game.Levels
+            .FirstOrDefault(l => l.LevelNumber == level)
+            ?.Rooms.FirstOrDefault(r => r.RoomNumber == room);
+    }
+
+    private (LevelInfo? Level, RoomInfo? Room) FindLevelAndRoom(ulong channelId)
+    {
+        foreach (var level in _game.Levels)
+        {
+            var room = level.Rooms.FirstOrDefault(r => r.ChannelId == channelId);
+            if (room != null)
+                return (level, room);
+        }
+        return (null, null);
     }
 }

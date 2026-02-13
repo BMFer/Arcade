@@ -4,9 +4,11 @@ A multi-game Discord bot platform built with C# and Discord.Net. The first game 
 
 ## How It Works
 
-An admin initializes a persistent tower of Discord categories, channels, and per-level roles. Each level contains a scrambled word puzzle. Players type their answers directly in the channel. Correct answers advance you up, wrong answers drop you down. Player visibility is controlled by role assignments, so the tower persists across games and bot restarts.
+An admin initializes a persistent tower of Discord categories, channels, and per-room roles. Each level has 3 rooms, each with its own scrambled word puzzle. Players must solve all 3 rooms in a level before advancing to the next. Players type their answers directly in the channel. Correct answers advance you to the next room (or next level after room 3). Wrong answers drop you down 1-2 levels and reset you to room 1. Player visibility is controlled by role assignments, so the tower persists across games and bot restarts.
 
 ### Tower Structure
+
+Each level has 3 rooms (configurable via `RoomsPerLevel`). Rooms are named `room-1a-basement`, `room-1b-basement`, `room-1c-basement`, etc.
 
 | Level | Name | Difficulty |
 |-------|------|------------|
@@ -18,22 +20,23 @@ An admin initializes a persistent tower of Discord categories, channels, and per
 
 ### Risk Mechanic
 
-- **Wrong guess**: Drop 1 level + 10 second cooldown
-- **Two wrong in a row**: Drop 2 levels + cooldown
+- **Wrong guess**: Drop 1 level (reset to room 1) + 10 second cooldown
+- **Two wrong in a row**: Drop 2 levels (reset to room 1) + cooldown
+- Penalties are at level granularity — you lose all room progress in the target level
 - This prevents brute-force guessing
 
 ### Power Cards
 
-Every 3 levels cleared, you earn a random card:
+Every 3 rooms cleared, you earn a random card:
 
 | Card | Effect |
 |------|--------|
-| Knockback | Push a player down 1 level |
+| Knockback | Push a player down 1 level (resets to room 1) |
 | Shield | Block the next knockback against you |
-| Spy | Reveal one letter of your current puzzle |
+| Spy | Reveal one letter of your current room's puzzle |
 | Freeze | Freeze a player for 60 seconds |
-| Chaos | Re-scramble another player's current puzzle |
-| Hint | Get a letter-based clue for your puzzle |
+| Chaos | Re-scramble another player's current room's puzzle |
+| Hint | Get a letter-based clue for your current room's puzzle |
 
 ### AI Assistants
 
@@ -131,7 +134,8 @@ Configuration is split across three sections in `appsettings.json`:
 | `WrongGuessCooldownSeconds` | `10` | Cooldown after a wrong guess |
 | `FreezeDurationSeconds` | `60` | Duration of the Freeze card effect |
 | `CrownHoldSeconds` | `60` | Seconds to hold Crown Room in King of the Tower mode |
-| `CardAwardInterval` | `3` | Levels cleared between card awards |
+| `CardAwardInterval` | `3` | Rooms cleared between card awards |
+| `RoomsPerLevel` | `3` | Number of rooms per tower level |
 | `MaxLevels` | `5` | Number of tower levels |
 | `TowerDataPath` | `"data/tower.json"` | File path for persisted tower data |
 
@@ -171,21 +175,21 @@ The bot will log in and appear online in your Discord server. If a Guild ID is c
 
 ### Gameplay Flow
 
-1. An admin runs `/heist-init` once to create the persistent tower (roles, categories, channels)
+1. An admin runs `/heist-init` once to create the persistent tower (roles, categories, channels — 3 rooms per level)
 2. A player runs `/heist-start` — this creates a lobby
 3. Other players join with `/heist-join`
-4. After the countdown, players receive their Level 1 role and can see only that level's channel
-5. A scrambled word appears in your level's channel — type the unscrambled answer
-6. Correct answer = role swap to the next level. Wrong answer = drop down + cooldown
-7. Every 3 levels cleared, you get a random power card to use against others
-8. First player to clear Level 5 (Crown Room) wins
+4. After the countdown, players receive their Level 1 Room 1 role and can see only that room's channel
+5. A scrambled word appears in your room's channel — type the unscrambled answer
+6. Correct answer = advance to the next room (or next level after room 3). Wrong answer = drop 1-2 levels to room 1 + cooldown
+7. Every 3 rooms cleared, you get a random power card to use against others
+8. First player to clear all 3 rooms of Level 5 (Crown Room) wins
 9. Game end strips all heist roles — the tower stays intact for the next game
 
 ### Tips
 
-- Don't guess randomly — two wrong answers in a row drops you 2 levels
+- Don't guess randomly — two wrong answers in a row drops you 2 levels and resets you to room 1
 - Save Knockback cards for when opponents are near the top
-- Shield is best used preemptively when you're on Level 4-5
+- Shield is best used preemptively when you're deep into Level 4-5
 - Freeze can lock someone out for a full minute — use it at a critical moment
 - You can check the game state anytime with `/heist-status`
 - Choose an AI assistant with `/choose-assistant` for in-game commentary
@@ -235,7 +239,8 @@ Arcade.sln
         │   ├── PlayerState.cs              Per-player tracking
         │   ├── Puzzle.cs                   Puzzle data
         │   ├── PowerCard.cs                Card type enum
-        │   └── LevelInfo.cs                Level metadata
+        │   ├── LevelInfo.cs                Level metadata
+        │   └── RoomInfo.cs                 Room metadata (channel & role IDs)
         ├── Words/
         │   ├── WordBank.cs                 Word lists (5 tiers)
         │   └── WordScrambler.cs            Scramble logic

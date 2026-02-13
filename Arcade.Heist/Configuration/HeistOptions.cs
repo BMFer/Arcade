@@ -9,6 +9,7 @@ public class HeistOptions
     public int FreezeDurationSeconds { get; set; } = 60;
     public int CrownHoldSeconds { get; set; } = 60;
     public int CardAwardInterval { get; set; } = 3;
+    public int RoomsPerLevel { get; set; } = 3;
     public int MaxLevels { get; set; } = 5;
     public string TowerDataPath { get; set; } = "data/tower.json";
 }

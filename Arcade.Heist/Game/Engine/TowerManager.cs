@@ -15,6 +15,8 @@ public class TowerManager
     private readonly HeistOptions _options;
     private readonly ILogger<TowerManager> _logger;
 
+    private static readonly string[] RoomLetters = ["a", "b", "c", "d", "e"];
+
     public TowerManager(
         DiscordSocketClient client,
         TowerDataStore dataStore,
@@ -43,27 +45,13 @@ public class TowerManager
                 ? LevelInfo.LevelNames[i]
                 : $"Level {levelNum}";
 
-            // Create the role for this level
-            var role = await guild.CreateRoleAsync(
-                $"Heist-L{levelNum}",
-                permissions: GuildPermissions.None,
-                color: null,
-                isHoisted: false,
-                isMentionable: false);
-
             // Create a category for this level
             var category = await guild.CreateCategoryChannelAsync($"🏗️ Heist - L{levelNum}: {name}");
 
-            // Set category permissions: deny @everyone, allow the level role, allow bot
+            // Set category permissions: deny @everyone, allow bot
             await category.AddPermissionOverwriteAsync(
                 guild.EveryoneRole,
                 new OverwritePermissions(viewChannel: PermValue.Deny));
-
-            await category.AddPermissionOverwriteAsync(
-                role,
-                new OverwritePermissions(
-                    viewChannel: PermValue.Allow,
-                    sendMessages: PermValue.Allow));
 
             await category.AddPermissionOverwriteAsync(
                 botUser,
@@ -72,29 +60,73 @@ public class TowerManager
                     sendMessages: PermValue.Allow,
                     manageMessages: PermValue.Allow));
 
-            // Create the puzzle room channel in this category
-            var channel = await guild.CreateTextChannelAsync(
-                $"room-{levelNum}-{name.ToLowerInvariant().Replace(' ', '-')}",
-                props => { props.CategoryId = category.Id; });
+            var rooms = new List<RoomInfo>();
+            var slugName = name.ToLowerInvariant().Replace(' ', '-');
+
+            for (int r = 0; r < _options.RoomsPerLevel; r++)
+            {
+                var roomNum = r + 1;
+                var roomLetter = r < RoomLetters.Length ? RoomLetters[r] : $"{roomNum}";
+
+                // Create the role for this room
+                var role = await guild.CreateRoleAsync(
+                    $"Heist-L{levelNum}-R{roomNum}",
+                    permissions: GuildPermissions.None,
+                    color: null,
+                    isHoisted: false,
+                    isMentionable: false);
+
+                // Create the room channel in this category
+                var channel = await guild.CreateTextChannelAsync(
+                    $"room-{levelNum}{roomLetter}-{slugName}",
+                    props => { props.CategoryId = category.Id; });
+
+                // Set channel permissions: deny @everyone, allow only this room's role, allow bot
+                await channel.AddPermissionOverwriteAsync(
+                    guild.EveryoneRole,
+                    new OverwritePermissions(viewChannel: PermValue.Deny));
+
+                await channel.AddPermissionOverwriteAsync(
+                    role,
+                    new OverwritePermissions(
+                        viewChannel: PermValue.Allow,
+                        sendMessages: PermValue.Allow));
+
+                await channel.AddPermissionOverwriteAsync(
+                    botUser,
+                    new OverwritePermissions(
+                        viewChannel: PermValue.Allow,
+                        sendMessages: PermValue.Allow,
+                        manageMessages: PermValue.Allow));
+
+                var room = new RoomInfo
+                {
+                    RoomNumber = roomNum,
+                    ChannelId = channel.Id,
+                    RoleId = role.Id
+                };
+                rooms.Add(room);
+
+                _logger.LogInformation(
+                    "Created room {Room} for level {Level}: {Name} (Role={RoleId}, Channel={ChannelId})",
+                    roomNum, levelNum, name, role.Id, channel.Id);
+            }
 
             var level = new LevelInfo
             {
                 LevelNumber = levelNum,
                 Name = name,
                 CategoryId = category.Id,
-                ChannelId = channel.Id,
-                RoleId = role.Id,
+                Rooms = rooms,
                 DifficultyTier = Math.Clamp(levelNum, 1, 5)
             };
 
             levels.Add(level);
-            _logger.LogInformation(
-                "Created tower level {Level}: {Name} (Role={RoleId}, Category={CategoryId}, Channel={ChannelId})",
-                levelNum, name, role.Id, category.Id, channel.Id);
         }
 
         await _dataStore.SaveAsync(levels);
-        return (true, $"Tower initialized with {levels.Count} levels. Roles, categories, and channels are ready.");
+        var totalRooms = levels.Count * _options.RoomsPerLevel;
+        return (true, $"Tower initialized with {levels.Count} levels and {totalRooms} rooms. Roles, categories, and channels are ready.");
     }
 
     public async Task<(bool Success, string Message)> TeardownTowerAsync(SocketGuild guild)
@@ -107,17 +139,20 @@ public class TowerManager
         {
             try
             {
-                var channel = guild.GetChannel(level.ChannelId);
-                if (channel != null)
-                    await channel.DeleteAsync();
+                foreach (var room in level.Rooms)
+                {
+                    var channel = guild.GetChannel(room.ChannelId);
+                    if (channel != null)
+                        await channel.DeleteAsync();
+
+                    var role = guild.GetRole(room.RoleId);
+                    if (role != null)
+                        await role.DeleteAsync();
+                }
 
                 var category = guild.GetChannel(level.CategoryId);
                 if (category != null)
                     await category.DeleteAsync();
-
-                var role = guild.GetRole(level.RoleId);
-                if (role != null)
-                    await role.DeleteAsync();
             }
             catch (Exception ex)
             {
@@ -134,24 +169,24 @@ public class TowerManager
         return await _dataStore.GetAsync();
     }
 
-    public async Task PlacePlayerAtLevelAsync(SocketGuild guild, ulong userId, LevelInfo level)
+    public async Task PlacePlayerAtRoomAsync(SocketGuild guild, ulong userId, RoomInfo room)
     {
         var user = guild.GetUser(userId);
         if (user == null) return;
 
-        var role = guild.GetRole(level.RoleId);
+        var role = guild.GetRole(room.RoleId);
         if (role == null) return;
 
         await user.AddRoleAsync(role);
     }
 
-    public async Task MovePlayerAsync(SocketGuild guild, ulong userId, LevelInfo fromLevel, LevelInfo toLevel)
+    public async Task MovePlayerToRoomAsync(SocketGuild guild, ulong userId, RoomInfo fromRoom, RoomInfo toRoom)
     {
         var user = guild.GetUser(userId);
         if (user == null) return;
 
-        var oldRole = guild.GetRole(fromLevel.RoleId);
-        var newRole = guild.GetRole(toLevel.RoleId);
+        var oldRole = guild.GetRole(fromRoom.RoleId);
+        var newRole = guild.GetRole(toRoom.RoleId);
 
         if (oldRole != null)
             await user.RemoveRoleAsync(oldRole);
@@ -164,7 +199,7 @@ public class TowerManager
         var levels = await _dataStore.GetAsync();
         if (levels == null) return;
 
-        var roleIds = levels.Select(l => l.RoleId).ToHashSet();
+        var roleIds = levels.SelectMany(l => l.Rooms.Select(r => r.RoleId)).ToHashSet();
         var roles = roleIds
             .Select(id => guild.GetRole(id))
             .Where(r => r != null)

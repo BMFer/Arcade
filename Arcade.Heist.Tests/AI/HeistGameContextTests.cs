@@ -7,7 +7,7 @@ namespace Arcade.Heist.Tests.AI;
 public class HeistGameContextTests
 {
     [Test]
-    public void Format_IncludesLevelAndCards()
+    public void Format_IncludesLevelRoomAndCards()
     {
         var player = MakePlayer();
         player.Cards.Add(PowerCard.Shield);
@@ -16,20 +16,21 @@ public class HeistGameContextTests
         var result = HeistGameContext.Format(player);
 
         Assert.That(result, Does.Contain("level 1"));
+        Assert.That(result, Does.Contain("room 1"));
         Assert.That(result, Does.Contain("2 power card(s)"));
     }
 
     [Test]
-    public void Format_IncludesWrongGuessesAndLevelsCleared()
+    public void Format_IncludesWrongGuessesAndRoomsCleared()
     {
         var player = MakePlayer();
         player.WrongGuessCount = 3;
-        player.LevelsCleared = 2;
+        player.RoomsCleared = 5;
 
         var result = HeistGameContext.Format(player);
 
         Assert.That(result, Does.Contain("Wrong guesses so far: 3"));
-        Assert.That(result, Does.Contain("Levels cleared: 2"));
+        Assert.That(result, Does.Contain("Rooms cleared: 5"));
     }
 
     [Test]
@@ -68,6 +69,7 @@ public class HeistGameContextTests
     {
         UserId = 1,
         DisplayName = "TestPlayer",
-        CurrentLevel = 1
+        CurrentLevel = 1,
+        CurrentRoom = 1
     };
 }

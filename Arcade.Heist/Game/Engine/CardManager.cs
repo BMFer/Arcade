@@ -46,13 +46,18 @@ public class CardManager
         }
 
         var oldLevel = target.CurrentLevel;
+        var oldRoom = target.CurrentRoom;
         target.CurrentLevel = Math.Max(1, target.CurrentLevel - 1);
+        target.CurrentRoom = 1;
         return new CardResult
         {
             Success = true,
-            Message = $"**{user.DisplayName}** knocked **{target.DisplayName}** from level {oldLevel} down to level {target.CurrentLevel}!",
-            TargetMoved = oldLevel != target.CurrentLevel,
-            TargetNewLevel = target.CurrentLevel
+            Message = $"**{user.DisplayName}** knocked **{target.DisplayName}** from level {oldLevel} down to level {target.CurrentLevel} room 1!",
+            TargetMoved = oldLevel != target.CurrentLevel || oldRoom != target.CurrentRoom,
+            TargetOldLevel = oldLevel,
+            TargetOldRoom = oldRoom,
+            TargetNewLevel = target.CurrentLevel,
+            TargetNewRoom = target.CurrentRoom
         };
     }
 
@@ -74,7 +79,7 @@ public class CardManager
         return new CardResult
         {
             Success = true,
-            Message = $"**{user.DisplayName}** froze **{target.DisplayName}** for {_options.FreezeDurationSeconds} seconds! ❄️"
+            Message = $"**{user.DisplayName}** froze **{target.DisplayName}** for {_options.FreezeDurationSeconds} seconds!"
         };
     }
 
@@ -93,17 +98,18 @@ public class CardManager
         };
     }
 
-    public CardResult UseChaos(PlayerState user, PlayerState target, Dictionary<int, Puzzle> activePuzzles, PuzzleManager puzzleManager)
+    public CardResult UseChaos(PlayerState user, PlayerState target, Dictionary<(int Level, int Room), Puzzle> activePuzzles, PuzzleManager puzzleManager)
     {
         RemoveCard(user, PowerCard.Chaos);
-        if (activePuzzles.TryGetValue(target.CurrentLevel, out var puzzle))
+        var key = (target.CurrentLevel, target.CurrentRoom);
+        if (activePuzzles.TryGetValue(key, out var puzzle))
         {
             var newPuzzle = puzzleManager.Rescramble(puzzle);
-            activePuzzles[target.CurrentLevel] = newPuzzle;
+            activePuzzles[key] = newPuzzle;
             return new CardResult
             {
                 Success = true,
-                Message = $"**{user.DisplayName}** caused Chaos for level {target.CurrentLevel}! The puzzle has been re-scrambled!",
+                Message = $"**{user.DisplayName}** caused Chaos for level {target.CurrentLevel} room {target.CurrentRoom}! The puzzle has been re-scrambled!",
                 NewPuzzle = newPuzzle
             };
         }
@@ -132,7 +138,10 @@ public class CardResult
     public bool Blocked { get; init; }
     public string Message { get; init; } = string.Empty;
     public bool TargetMoved { get; init; }
+    public int TargetOldLevel { get; init; }
+    public int TargetOldRoom { get; init; }
     public int TargetNewLevel { get; init; }
+    public int TargetNewRoom { get; init; }
     public bool IsPrivate { get; init; }
     public Puzzle? NewPuzzle { get; init; }
 }

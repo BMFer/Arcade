@@ -45,6 +45,13 @@ public class PlayerManagerTests
     }
 
     [Test]
+    public void CreatePlayer_StartsAtRoom1()
+    {
+        var player = _manager.CreatePlayer(42, "Alice");
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
+    }
+
+    [Test]
     public void CreatePlayer_EmptyCards()
     {
         var player = _manager.CreatePlayer(42, "Alice");
@@ -61,10 +68,32 @@ public class PlayerManagerTests
     // --- AdvancePlayer ---
 
     [Test]
-    public void AdvancePlayer_IncrementsLevel()
+    public void AdvancePlayer_FirstRoom_AdvancesToRoom2()
     {
         var player = _manager.CreatePlayer(1, "Bob");
+        player.CurrentRoom = 1;
         _manager.AdvancePlayer(player);
+        Assert.That(player.CurrentRoom, Is.EqualTo(2));
+        Assert.That(player.CurrentLevel, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void AdvancePlayer_SecondRoom_AdvancesToRoom3()
+    {
+        var player = _manager.CreatePlayer(1, "Bob");
+        player.CurrentRoom = 2;
+        _manager.AdvancePlayer(player);
+        Assert.That(player.CurrentRoom, Is.EqualTo(3));
+        Assert.That(player.CurrentLevel, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void AdvancePlayer_LastRoom_AdvancesToNextLevel()
+    {
+        var player = _manager.CreatePlayer(1, "Bob");
+        player.CurrentRoom = 3; // RoomsPerLevel default is 3
+        _manager.AdvancePlayer(player);
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
         Assert.That(player.CurrentLevel, Is.EqualTo(2));
     }
 
@@ -78,11 +107,11 @@ public class PlayerManagerTests
     }
 
     [Test]
-    public void AdvancePlayer_IncrementsLevelsCleared()
+    public void AdvancePlayer_IncrementsRoomsCleared()
     {
         var player = _manager.CreatePlayer(1, "Bob");
         _manager.AdvancePlayer(player);
-        Assert.That(player.LevelsCleared, Is.EqualTo(1));
+        Assert.That(player.RoomsCleared, Is.EqualTo(1));
     }
 
     // --- PenalizePlayer ---
@@ -92,8 +121,19 @@ public class PlayerManagerTests
     {
         var player = _manager.CreatePlayer(1, "Carol");
         player.CurrentLevel = 3;
+        player.CurrentRoom = 2;
         _manager.PenalizePlayer(player);
         Assert.That(player.CurrentLevel, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void PenalizePlayer_ResetsRoomTo1()
+    {
+        var player = _manager.CreatePlayer(1, "Carol");
+        player.CurrentLevel = 3;
+        player.CurrentRoom = 2;
+        _manager.PenalizePlayer(player);
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
     }
 
     [Test]
@@ -101,9 +141,11 @@ public class PlayerManagerTests
     {
         var player = _manager.CreatePlayer(1, "Carol");
         player.CurrentLevel = 5;
+        player.CurrentRoom = 3;
         player.ConsecutiveWrongCount = 1; // Already had one wrong
         _manager.PenalizePlayer(player);
         Assert.That(player.CurrentLevel, Is.EqualTo(3));
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
     }
 
     [Test]
@@ -111,8 +153,10 @@ public class PlayerManagerTests
     {
         var player = _manager.CreatePlayer(1, "Carol");
         player.CurrentLevel = 1;
+        player.CurrentRoom = 2;
         _manager.PenalizePlayer(player);
         Assert.That(player.CurrentLevel, Is.EqualTo(1));
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
     }
 
     [Test]
@@ -141,6 +185,7 @@ public class PlayerManagerTests
         player.ConsecutiveWrongCount = 1;
         _manager.PenalizePlayer(player);
         Assert.That(player.CurrentLevel, Is.EqualTo(1));
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
     }
 
     // --- ShouldAwardCard ---
@@ -149,7 +194,7 @@ public class PlayerManagerTests
     public void ShouldAwardCard_AtInterval_ReturnsTrue()
     {
         var player = _manager.CreatePlayer(1, "Dave");
-        player.LevelsCleared = _options.CardAwardInterval; // 3
+        player.RoomsCleared = _options.CardAwardInterval; // 3
         Assert.That(_manager.ShouldAwardCard(player), Is.True);
     }
 
@@ -157,7 +202,7 @@ public class PlayerManagerTests
     public void ShouldAwardCard_AtZero_ReturnsFalse()
     {
         var player = _manager.CreatePlayer(1, "Dave");
-        player.LevelsCleared = 0;
+        player.RoomsCleared = 0;
         Assert.That(_manager.ShouldAwardCard(player), Is.False);
     }
 
@@ -165,7 +210,7 @@ public class PlayerManagerTests
     public void ShouldAwardCard_NotAtInterval_ReturnsFalse()
     {
         var player = _manager.CreatePlayer(1, "Dave");
-        player.LevelsCleared = 2;
+        player.RoomsCleared = 2;
         Assert.That(_manager.ShouldAwardCard(player), Is.False);
     }
 

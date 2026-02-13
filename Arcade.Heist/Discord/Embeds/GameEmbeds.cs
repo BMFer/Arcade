@@ -7,10 +7,10 @@ namespace Arcade.Heist.Discord.Embeds;
 
 public static class GameEmbeds
 {
-    public static Embed PuzzleEmbed(Puzzle puzzle, int level)
+    public static Embed PuzzleEmbed(Puzzle puzzle, int level, int room)
     {
         var builder = new EmbedBuilder()
-            .WithTitle($"Level {level} — Unscramble!")
+            .WithTitle($"Level {level} — Room {room} — Unscramble!")
             .WithDescription($"```\n{puzzle.ScrambledWord.ToUpperInvariant()}\n```")
             .WithColor(GetLevelColor(level))
             .WithFooter($"Tier {puzzle.DifficultyTier} | Type your answer in chat");
@@ -21,13 +21,16 @@ public static class GameEmbeds
         return builder.Build();
     }
 
-    public static Embed CorrectAnswerEmbed(PlayerState player, Puzzle puzzle, int previousLevel, PowerCard? awardedCard)
+    public static Embed CorrectAnswerEmbed(PlayerState player, Puzzle puzzle, int previousLevel, int previousRoom, PowerCard? awardedCard)
     {
+        var fromText = $"L{previousLevel} Room {previousRoom}";
+        var toText = $"L{player.CurrentLevel} Room {player.CurrentRoom}";
+
         var builder = new EmbedBuilder()
             .WithTitle("Correct!")
             .WithDescription($"**{player.DisplayName}** solved it! The answer was **{puzzle.OriginalWord}**.")
             .WithColor(Color.Green)
-            .AddField("Advancing", $"Level {previousLevel} -> Level {player.CurrentLevel}", true);
+            .AddField("Advancing", $"{fromText} -> {toText}", true);
 
         if (awardedCard.HasValue)
             builder.AddField("Card Earned!", $"You earned a **{awardedCard.Value}** card!", true);
@@ -42,7 +45,7 @@ public static class GameEmbeds
             .WithTitle("Wrong!")
             .WithDescription($"**{player.DisplayName}** guessed wrong!")
             .WithColor(Color.Red)
-            .AddField("Penalty", $"Dropped {dropLevels} level(s) to level {player.CurrentLevel}", true)
+            .AddField("Penalty", $"Dropped {dropLevels} level(s) to level {player.CurrentLevel} room 1", true)
             .AddField("Cooldown", $"{(int)player.CooldownRemaining.TotalSeconds}s", true);
 
         return builder.Build();
@@ -62,7 +65,7 @@ public static class GameEmbeds
             .WithTitle("HEIST COMPLETE!")
             .WithDescription($"**{player.DisplayName}** has cleared the Crown Room and won the heist!")
             .WithColor(Color.Gold)
-            .AddField("Stats", $"Total wrong guesses: {player.WrongGuessCount}\nLevels cleared: {player.LevelsCleared}", false)
+            .AddField("Stats", $"Total wrong guesses: {player.WrongGuessCount}\nRooms cleared: {player.RoomsCleared}", false)
             .Build();
     }
 
@@ -80,6 +83,15 @@ public static class GameEmbeds
             .Build();
     }
 
+    public static Embed PlayerJoinedEmbed(string displayName)
+    {
+        return new EmbedBuilder()
+            .WithTitle("New Player!")
+            .WithDescription($"**{displayName}** has joined the heist and is starting at Level 1 Room 1!")
+            .WithColor(Color.Green)
+            .Build();
+    }
+
     public static Embed StatusEmbed(GameState game)
     {
         var builder = new EmbedBuilder()
@@ -94,6 +106,7 @@ public static class GameEmbeds
 
         var playersByLevel = game.Players.Values
             .OrderByDescending(p => p.CurrentLevel)
+            .ThenByDescending(p => p.CurrentRoom)
             .GroupBy(p => p.CurrentLevel);
 
         foreach (var group in playersByLevel)
@@ -104,7 +117,7 @@ public static class GameEmbeds
             {
                 var status = p.IsOnCooldown ? " (frozen)" : "";
                 var shield = p.ShieldActive ? " [shielded]" : "";
-                return $"{p.DisplayName}{status}{shield}";
+                return $"{p.DisplayName} (R{p.CurrentRoom}){status}{shield}";
             }));
             builder.AddField($"L{group.Key}: {levelName}", players, false);
         }
