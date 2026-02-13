@@ -6,4 +6,5 @@ public class BotOptions
 
     public string BotToken { get; set; } = string.Empty;
     public ulong GuildId { get; set; }
+    public string HostRoleName { get; set; } = "Arcade Host";
 }

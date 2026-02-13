@@ -69,11 +69,37 @@ public abstract class BotHostedServiceBase : IHostedService
         {
             await Interactions.RegisterCommandsToGuildAsync(BotOptions.GuildId);
             Logger.LogInformation("Slash commands registered to guild {GuildId}", BotOptions.GuildId);
+
+            await EnsureHostRoleAsync(BotOptions.GuildId);
         }
         else
         {
             await Interactions.RegisterCommandsGloballyAsync();
             Logger.LogInformation("Slash commands registered globally");
+        }
+    }
+
+    private async Task EnsureHostRoleAsync(ulong guildId)
+    {
+        var guild = Client.GetGuild(guildId);
+        if (guild == null)
+        {
+            Logger.LogWarning("Could not find guild {GuildId} to ensure host role", guildId);
+            return;
+        }
+
+        var roleName = BotOptions.HostRoleName;
+        var existingRole = guild.Roles.FirstOrDefault(
+            r => string.Equals(r.Name, roleName, StringComparison.OrdinalIgnoreCase));
+
+        if (existingRole != null)
+        {
+            Logger.LogInformation("Host role \"{RoleName}\" already exists in guild {GuildId}", roleName, guildId);
+        }
+        else
+        {
+            await guild.CreateRoleAsync(roleName, GuildPermissions.None, isMentionable: false);
+            Logger.LogInformation("Created host role \"{RoleName}\" in guild {GuildId}", roleName, guildId);
         }
     }
 

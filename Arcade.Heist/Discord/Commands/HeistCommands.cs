@@ -2,6 +2,7 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using Arcade.Core.AI;
+using Arcade.Core.Discord;
 using Arcade.Heist.AI;
 using Arcade.Heist.Configuration;
 using Arcade.Heist.Discord.Embeds;
@@ -57,7 +58,7 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
                 return;
             }
 
-            await Context.Channel.SendMessageAsync($"The heist begins with **{currentGame.Players.Count}** player(s)! Preparing the tower...");
+            await Context.Channel.SendMessageAsync($"The heist begins with **{currentGame.Players.Count}** player(s)! Preparing the tower...\nNew players can still join with `/heist-join` while the heist is active.");
 
             var guild = Context.Guild;
             var started = await _gameManager.StartGameAsync(guild);
@@ -72,24 +73,32 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
         });
     }
 
-    [SlashCommand("heist-join", "Join the current heist lobby.")]
+    [SlashCommand("heist-join", "Join the current heist lobby or an active heist.")]
     public async Task JoinAsync()
     {
         var game = _gameManager.CurrentGame;
-        if (game.Status != GameStatus.Lobby)
-        {
-            await RespondAsync("No heist lobby is open. Use `/heist-start` to create one.", ephemeral: true);
-            return;
-        }
-
         var displayName = Context.User.GlobalName ?? Context.User.Username;
-        if (_gameManager.JoinLobby(Context.User.Id, displayName))
+
+        switch (game.Status)
         {
-            await RespondAsync(embed: GameEmbeds.LobbyEmbed(game.Players.Values));
-        }
-        else
-        {
-            await RespondAsync("You're already in the lobby!", ephemeral: true);
+            case GameStatus.Lobby:
+                if (_gameManager.JoinLobby(Context.User.Id, displayName))
+                    await RespondAsync(embed: GameEmbeds.LobbyEmbed(game.Players.Values));
+                else
+                    await RespondAsync("You're already in the lobby!", ephemeral: true);
+                break;
+
+            case GameStatus.Active:
+                var (success, level) = await _gameManager.JoinGameAsync(Context.User.Id, displayName, Context.Guild);
+                if (success)
+                    await RespondAsync($"You've joined the heist! Head to the Level 1 channel to start solving puzzles.", ephemeral: true);
+                else
+                    await RespondAsync("You're already in the game!", ephemeral: true);
+                break;
+
+            default:
+                await RespondAsync("No heist is running. Use `/heist-start` to create one.", ephemeral: true);
+                break;
         }
     }
 
@@ -127,8 +136,8 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
         await RespondAsync(embed: GameEmbeds.StatusEmbed(game));
     }
 
-    [SlashCommand("heist-end", "Force end the current heist (admin only).")]
-    [RequireUserPermission(GuildPermission.Administrator)]
+    [SlashCommand("heist-end", "Force end the current heist (host/admin only).")]
+    [RequireArcadeHost]
     public async Task EndAsync()
     {
         var game = _gameManager.CurrentGame;
@@ -143,8 +152,8 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
         await FollowupAsync("Heist ended. Player roles stripped. Tower channels remain for the next game.");
     }
 
-    [SlashCommand("heist-init", "Initialize the heist tower (admin only). Creates roles, categories, and channels.")]
-    [RequireUserPermission(GuildPermission.Administrator)]
+    [SlashCommand("heist-init", "Initialize the heist tower (host/admin only). Creates roles, categories, and channels.")]
+    [RequireArcadeHost]
     public async Task InitAsync()
     {
         await DeferAsync();
@@ -152,8 +161,8 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
         await FollowupAsync(message);
     }
 
-    [SlashCommand("heist-teardown", "Tear down the heist tower (admin only). Deletes all tower roles, categories, and channels.")]
-    [RequireUserPermission(GuildPermission.Administrator)]
+    [SlashCommand("heist-teardown", "Tear down the heist tower (host/admin only). Deletes all tower roles, categories, and channels.")]
+    [RequireArcadeHost]
     public async Task TeardownAsync()
     {
         var game = _gameManager.CurrentGame;
