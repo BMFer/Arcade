@@ -257,6 +257,48 @@ public class GameEmbedsTests
         Assert.That(field.Value, Does.Contain("(R1)"));
     }
 
+    [Test]
+    public void StatusEmbed_NotActive_ShowsStatus()
+    {
+        var game = new GameState { Status = GameStatus.Lobby };
+        var embed = GameEmbeds.StatusEmbed(game);
+        Assert.That(embed.Description, Does.Contain("Lobby"));
+    }
+
+    [Test]
+    public void StatusEmbed_FrozenPlayer_ShowsFrozenTag()
+    {
+        var game = new GameState
+        {
+            Status = GameStatus.Active,
+            Players = new Dictionary<ulong, PlayerState>
+            {
+                [1] = new() { UserId = 1, DisplayName = "Alice", CurrentLevel = 1, CurrentRoom = 1, CooldownExpiry = DateTimeOffset.UtcNow.AddSeconds(30) }
+            },
+            Levels = [new LevelInfo { LevelNumber = 1, Name = "Basement" }]
+        };
+        var embed = GameEmbeds.StatusEmbed(game);
+        var field = embed.Fields.First(f => f.Name.Contains("Basement"));
+        Assert.That(field.Value, Does.Contain("(frozen)"));
+    }
+
+    [Test]
+    public void StatusEmbed_ShieldedPlayer_ShowsShieldTag()
+    {
+        var game = new GameState
+        {
+            Status = GameStatus.Active,
+            Players = new Dictionary<ulong, PlayerState>
+            {
+                [1] = new() { UserId = 1, DisplayName = "Alice", CurrentLevel = 1, CurrentRoom = 1, ShieldActive = true }
+            },
+            Levels = [new LevelInfo { LevelNumber = 1, Name = "Basement" }]
+        };
+        var embed = GameEmbeds.StatusEmbed(game);
+        var field = embed.Fields.First(f => f.Name.Contains("Basement"));
+        Assert.That(field.Value, Does.Contain("[shielded]"));
+    }
+
     // --- CardUsedEmbed ---
 
     [Test]
@@ -298,12 +340,78 @@ public class GameEmbedsTests
     }
 
     [Test]
-    public void HelpEmbed_HasGameplayAndCardsFields()
+    public void HelpEmbed_HasAllExpectedFields()
     {
         var embed = GameEmbeds.HelpEmbed();
         Assert.That(embed.Fields.Any(f => f.Name == "Gameplay"), Is.True);
+        Assert.That(embed.Fields.Any(f => f.Name == "Wrong Answers"), Is.True);
         Assert.That(embed.Fields.Any(f => f.Name == "Power Cards"), Is.True);
         Assert.That(embed.Fields.Any(f => f.Name == "Commands"), Is.True);
+        Assert.That(embed.Fields.Any(f => f.Name == "Tips"), Is.True);
+    }
+
+    [Test]
+    public void HelpEmbed_DescriptionMentions3Rooms()
+    {
+        var embed = GameEmbeds.HelpEmbed();
+        Assert.That(embed.Description, Does.Contain("3 rooms"));
+    }
+
+    [Test]
+    public void HelpEmbed_CommandsFieldListsHeistStart()
+    {
+        var embed = GameEmbeds.HelpEmbed();
+        var cmds = embed.Fields.First(f => f.Name == "Commands");
+        Assert.That(cmds.Value, Does.Contain("/heist-start"));
+        Assert.That(cmds.Value, Does.Contain("/heist-join"));
+        Assert.That(cmds.Value, Does.Contain("/use-card"));
+    }
+
+    [Test]
+    public void HelpEmbed_PowerCardsFieldListsAllCards()
+    {
+        var embed = GameEmbeds.HelpEmbed();
+        var cards = embed.Fields.First(f => f.Name == "Power Cards");
+        Assert.That(cards.Value, Does.Contain("Knockback"));
+        Assert.That(cards.Value, Does.Contain("Shield"));
+        Assert.That(cards.Value, Does.Contain("Spy"));
+        Assert.That(cards.Value, Does.Contain("Freeze"));
+        Assert.That(cards.Value, Does.Contain("Chaos"));
+        Assert.That(cards.Value, Does.Contain("Hint"));
+    }
+
+    // --- RoadmapEmbed ---
+
+    [Test]
+    public void RoadmapEmbed_TitleIsArcadeRoadmap()
+    {
+        var embed = GameEmbeds.RoadmapEmbed();
+        Assert.That(embed.Title, Is.EqualTo("Arcade Roadmap"));
+    }
+
+    [Test]
+    public void RoadmapEmbed_HasAllExpectedFields()
+    {
+        var embed = GameEmbeds.RoadmapEmbed();
+        Assert.That(embed.Fields.Any(f => f.Name == "Completed"), Is.True);
+        Assert.That(embed.Fields.Any(f => f.Name == "In Progress"), Is.True);
+        Assert.That(embed.Fields.Any(f => f.Name == "Planned"), Is.True);
+    }
+
+    [Test]
+    public void RoadmapEmbed_CompletedFieldMentionsPowerCards()
+    {
+        var embed = GameEmbeds.RoadmapEmbed();
+        var completed = embed.Fields.First(f => f.Name == "Completed");
+        Assert.That(completed.Value, Does.Contain("Power cards"));
+    }
+
+    [Test]
+    public void RoadmapEmbed_PlannedFieldMentionsSeasonalLadder()
+    {
+        var embed = GameEmbeds.RoadmapEmbed();
+        var planned = embed.Fields.First(f => f.Name == "Planned");
+        Assert.That(planned.Value, Does.Contain("Seasonal Ladder"));
     }
 
     // --- AssistantSelectionEmbed ---
@@ -328,6 +436,39 @@ public class GameEmbedsTests
         var embed = GameEmbeds.AssistantResponseEmbed(profile, "Hello!");
         Assert.That(embed.Author.HasValue, Is.True);
         Assert.That(embed.Author!.Value.Name, Is.EqualTo("Glitch"));
+    }
+
+    [Test]
+    public void AssistantResponseEmbed_WithBannerFileName_HasImageUrl()
+    {
+        var profile = new AssistantProfile { Id = "t", Name = "Tank", Personality = "p", Description = "d" };
+        var embed = GameEmbeds.AssistantResponseEmbed(profile, "Hello!", "Tank-Banner.001.png");
+        Assert.That(embed.Image.HasValue, Is.True);
+        Assert.That(embed.Image!.Value.Url, Is.EqualTo("attachment://Tank-Banner.001.png"));
+    }
+
+    [Test]
+    public void AssistantResponseEmbed_WithoutBannerFileName_NoImageUrl()
+    {
+        var profile = new AssistantProfile { Id = "g", Name = "Glitch", Personality = "p", Description = "d" };
+        var embed = GameEmbeds.AssistantResponseEmbed(profile, "Hello!");
+        Assert.That(embed.Image.HasValue, Is.False);
+    }
+
+    [Test]
+    public void GetBannerAttachment_NoBannerPath_ReturnsNull()
+    {
+        var profile = new AssistantProfile { Id = "g", Name = "Glitch", Personality = "p", Description = "d" };
+        var result = GameEmbeds.GetBannerAttachment(profile);
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void GetBannerAttachment_NonExistentDirectory_ReturnsNull()
+    {
+        var profile = new AssistantProfile { Id = "t", Name = "Tank", Personality = "p", Description = "d", BannerPath = "Assets/Images/DoesNotExist" };
+        var result = GameEmbeds.GetBannerAttachment(profile);
+        Assert.That(result, Is.Null);
     }
 
     // Helpers

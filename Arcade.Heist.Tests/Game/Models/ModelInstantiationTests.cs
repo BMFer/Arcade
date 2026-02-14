@@ -1,3 +1,4 @@
+using Arcade.Heist.Discord.Commands;
 using Arcade.Heist.Game.Models;
 
 namespace Arcade.Heist.Tests.Game.Models;
@@ -32,6 +33,34 @@ public class ModelInstantiationTests
         Assert.That(room.RoomNumber, Is.EqualTo(1));
         Assert.That(room.ChannelId, Is.EqualTo(123));
         Assert.That(room.RoleId, Is.EqualTo(456));
+    }
+
+    [Test]
+    public void GameState_ActivePuzzles_DefaultEmpty()
+    {
+        var state = new GameState();
+        Assert.That(state.ActivePuzzles, Is.Empty);
+    }
+
+    [Test]
+    public void GameState_Players_DefaultEmpty()
+    {
+        var state = new GameState();
+        Assert.That(state.Players, Is.Empty);
+    }
+
+    [Test]
+    public void GameState_Levels_DefaultEmpty()
+    {
+        var state = new GameState();
+        Assert.That(state.Levels, Is.Empty);
+    }
+
+    [Test]
+    public void HostAction_HasGrantAndRevoke()
+    {
+        Assert.That(Enum.IsDefined(typeof(HostAction), HostAction.Grant), Is.True);
+        Assert.That(Enum.IsDefined(typeof(HostAction), HostAction.Revoke), Is.True);
     }
 
     [Test]

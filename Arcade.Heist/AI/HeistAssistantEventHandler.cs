@@ -18,7 +18,11 @@ public class HeistAssistantEventHandler : IAssistantEventHandler
     {
         if (_client.GetChannel(channelId) is SocketTextChannel channel)
         {
-            await channel.SendMessageAsync(embed: GameEmbeds.AssistantResponseEmbed(profile, response));
+            var attachment = GameEmbeds.GetBannerAttachment(profile);
+            if (attachment is { } file)
+                await channel.SendFileAsync(file, embed: GameEmbeds.AssistantResponseEmbed(profile, response, file.FileName));
+            else
+                await channel.SendMessageAsync(embed: GameEmbeds.AssistantResponseEmbed(profile, response));
         }
     }
 }

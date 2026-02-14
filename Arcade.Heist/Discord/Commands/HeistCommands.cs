@@ -2,6 +2,7 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using Arcade.Core.AI;
+using Arcade.Core.Configuration;
 using Arcade.Core.Discord;
 using Arcade.Heist.AI;
 using Arcade.Heist.Configuration;
@@ -18,16 +19,19 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
     private readonly TowerManager _towerManager;
     private readonly AssistantService _assistantService;
     private readonly HeistOptions _options;
+    private readonly BotOptions _botOptions;
 
-    public HeistCommands(GameManager gameManager, TowerManager towerManager, AssistantService assistantService, IOptions<HeistOptions> options)
+    public HeistCommands(GameManager gameManager, TowerManager towerManager, AssistantService assistantService, IOptions<HeistOptions> options, IOptions<BotOptions> botOptions)
     {
         _gameManager = gameManager;
         _towerManager = towerManager;
         _assistantService = assistantService;
         _options = options.Value;
+        _botOptions = botOptions.Value;
     }
 
-    [SlashCommand("heist-start", "Start a new heist! Creates a lobby for players to join.")]
+    [SlashCommand("heist-start", "Start a new heist! Creates a lobby for players to join (host/admin only).")]
+    [RequireArcadeHost]
     public async Task StartAsync()
     {
         var game = _gameManager.CurrentGame;
@@ -172,9 +176,16 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
             return;
         }
 
-        await DeferAsync();
+        await RespondAsync("Tearing down the tower...");
         var (success, message) = await _towerManager.TeardownTowerAsync(Context.Guild as SocketGuild ?? throw new InvalidOperationException("Guild not available"));
-        await FollowupAsync(message);
+        try
+        {
+            await FollowupAsync(message);
+        }
+        catch (global::Discord.Net.HttpException)
+        {
+            // Channel may have been deleted during teardown
+        }
     }
 
     [SlashCommand("use-card", "Use a power card from your inventory.")]
@@ -217,6 +228,12 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
         await RespondAsync(embed: GameEmbeds.HelpEmbed());
     }
 
+    [SlashCommand("arcade-roadmap", "View the Arcade platform roadmap.")]
+    public async Task RoadmapAsync()
+    {
+        await RespondAsync(embed: GameEmbeds.RoadmapEmbed());
+    }
+
     [SlashCommand("ping", "Check if the bot is alive.")]
     public async Task PingAsync()
     {
@@ -246,10 +263,23 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
             .WithSelectMenu(menuBuilder)
             .Build();
 
-        await RespondAsync(
-            embed: GameEmbeds.AssistantSelectionEmbed(profiles),
-            components: component,
-            ephemeral: true);
+        await DeferAsync(ephemeral: true);
+
+        var banner = GameEmbeds.GetDialogBanner("Dialog-SelectAssistant-Banner.001.png");
+        if (banner is { } file)
+        {
+            await FollowupWithFileAsync(file,
+                embed: GameEmbeds.AssistantSelectionEmbed(profiles, file.FileName),
+                components: component,
+                ephemeral: true);
+        }
+        else
+        {
+            await FollowupAsync(
+                embed: GameEmbeds.AssistantSelectionEmbed(profiles),
+                components: component,
+                ephemeral: true);
+        }
     }
 
     [SlashCommand("ask-assistant", "Ask your AI assistant a question.")]
@@ -276,6 +306,52 @@ public class HeistCommands : InteractionModuleBase<SocketInteractionContext>
             return;
         }
 
-        await FollowupAsync(embed: GameEmbeds.AssistantResponseEmbed(assistant, response));
+        var attachment = GameEmbeds.GetBannerAttachment(assistant);
+        if (attachment is { } file)
+            await FollowupWithFileAsync(file, embed: GameEmbeds.AssistantResponseEmbed(assistant, response, file.FileName));
+        else
+            await FollowupAsync(embed: GameEmbeds.AssistantResponseEmbed(assistant, response));
     }
+
+    [SlashCommand("arcade-host", "Grant or revoke the Arcade Host role (admin only).")]
+    [RequireUserPermission(GuildPermission.Administrator)]
+    public async Task ArcadeHostAsync(
+        [Summary("member", "The member to update")] SocketGuildUser member,
+        [Summary("action", "Grant or revoke the role")] HostAction action = HostAction.Grant)
+    {
+        var roleName = _botOptions.HostRoleName;
+        IRole? role = Context.Guild.Roles.FirstOrDefault(
+            r => string.Equals(r.Name, roleName, StringComparison.OrdinalIgnoreCase));
+
+        role ??= await Context.Guild.CreateRoleAsync(roleName, GuildPermissions.None, isMentionable: false);
+
+        if (action == HostAction.Grant)
+        {
+            if (member.Roles.Any(r => r.Id == role.Id))
+            {
+                await RespondAsync($"**{member.DisplayName}** already has the **{roleName}** role.", ephemeral: true);
+                return;
+            }
+
+            await member.AddRoleAsync(role);
+            await RespondAsync($"**{member.DisplayName}** has been granted the **{roleName}** role.");
+        }
+        else
+        {
+            if (!member.Roles.Any(r => r.Id == role.Id))
+            {
+                await RespondAsync($"**{member.DisplayName}** doesn't have the **{roleName}** role.", ephemeral: true);
+                return;
+            }
+
+            await member.RemoveRoleAsync(role);
+            await RespondAsync($"**{member.DisplayName}** has had the **{roleName}** role revoked.");
+        }
+    }
+}
+
+public enum HostAction
+{
+    Grant,
+    Revoke
 }

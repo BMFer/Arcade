@@ -50,9 +50,21 @@ public class HeistBotHostedService : Arcade.Core.Discord.BotHostedServiceBase
             return;
         }
 
+        await component.DeferAsync(ephemeral: true);
         await _assistantService.SelectAssistantAsync(component.User.Id, selectedId);
-        await component.RespondAsync(
-            embed: GameEmbeds.AssistantResponseEmbed(profile, $"**{profile.Name}** is now your assistant!"),
-            ephemeral: true);
+
+        var attachment = GameEmbeds.GetBannerAttachment(profile);
+        if (attachment is { } file)
+        {
+            await component.FollowupWithFileAsync(file,
+                embed: GameEmbeds.AssistantResponseEmbed(profile, $"**{profile.Name}** is now your assistant!", file.FileName),
+                ephemeral: true);
+        }
+        else
+        {
+            await component.FollowupAsync(
+                embed: GameEmbeds.AssistantResponseEmbed(profile, $"**{profile.Name}** is now your assistant!"),
+                ephemeral: true);
+        }
     }
 }

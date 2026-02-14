@@ -18,4 +18,11 @@ public class BotOptionsTests
         var options = new BotOptions();
         Assert.That(options.GuildId, Is.EqualTo((ulong)0));
     }
+
+    [Test]
+    public void HostRoleName_DefaultIsArcadeHost()
+    {
+        var options = new BotOptions();
+        Assert.That(options.HostRoleName, Is.EqualTo("Arcade Host"));
+    }
 }

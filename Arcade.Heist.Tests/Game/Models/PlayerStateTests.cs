@@ -6,6 +6,27 @@ namespace Arcade.Heist.Tests.Game.Models;
 public class PlayerStateTests
 {
     [Test]
+    public void CurrentRoom_DefaultIs1()
+    {
+        var player = new PlayerState { UserId = 1, DisplayName = "Test" };
+        Assert.That(player.CurrentRoom, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CurrentLevel_DefaultIs1()
+    {
+        var player = new PlayerState { UserId = 1, DisplayName = "Test" };
+        Assert.That(player.CurrentLevel, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void RoomsCleared_DefaultIs0()
+    {
+        var player = new PlayerState { UserId = 1, DisplayName = "Test" };
+        Assert.That(player.RoomsCleared, Is.EqualTo(0));
+    }
+
+    [Test]
     public void IsOnCooldown_FutureExpiry_ReturnsTrue()
     {
         var player = new PlayerState

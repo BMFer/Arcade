@@ -8,4 +8,5 @@ public class AssistantProfile
     public string? AvatarUrl { get; init; }
     public required string Description { get; init; }
     public string? OllamaModel { get; init; }
+    public string? BannerPath { get; init; }
 }

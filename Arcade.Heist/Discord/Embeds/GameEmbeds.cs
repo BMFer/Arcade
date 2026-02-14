@@ -147,12 +147,15 @@ public static class GameEmbeds
             .Build();
     }
 
-    public static Embed AssistantSelectionEmbed(IEnumerable<AssistantProfile> profiles)
+    public static Embed AssistantSelectionEmbed(IEnumerable<AssistantProfile> profiles, string? bannerFileName = null)
     {
         var builder = new EmbedBuilder()
             .WithTitle("Choose Your Assistant")
             .WithDescription("Select an AI assistant to accompany you on the heist. They'll provide commentary and answer your questions.")
             .WithColor(Color.Teal);
+
+        if (bannerFileName != null)
+            builder.WithImageUrl($"attachment://{bannerFileName}");
 
         foreach (var profile in profiles)
             builder.AddField(profile.Name, profile.Description, true);
@@ -160,13 +163,45 @@ public static class GameEmbeds
         return builder.Build();
     }
 
-    public static Embed AssistantResponseEmbed(AssistantProfile profile, string response)
+    public static Embed AssistantResponseEmbed(AssistantProfile profile, string response, string? bannerFileName = null)
     {
-        return new EmbedBuilder()
+        var builder = new EmbedBuilder()
             .WithAuthor(profile.Name, profile.AvatarUrl)
             .WithDescription(response)
-            .WithColor(Color.DarkTeal)
-            .Build();
+            .WithColor(Color.DarkTeal);
+
+        if (bannerFileName != null)
+            builder.WithImageUrl($"attachment://{bannerFileName}");
+
+        return builder.Build();
+    }
+
+    private static readonly Random _bannerRandom = new();
+
+    public static FileAttachment? GetBannerAttachment(AssistantProfile profile)
+    {
+        if (string.IsNullOrEmpty(profile.BannerPath))
+            return null;
+
+        var dirPath = Path.Combine(AppContext.BaseDirectory, profile.BannerPath);
+        if (!Directory.Exists(dirPath))
+            return null;
+
+        var images = Directory.GetFiles(dirPath, "*.png");
+        if (images.Length == 0)
+            return null;
+
+        var chosen = images[_bannerRandom.Next(images.Length)];
+        return new FileAttachment(chosen, Path.GetFileName(chosen));
+    }
+
+    public static FileAttachment? GetDialogBanner(string fileName)
+    {
+        var fullPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Images", "Dialogs", fileName);
+        if (!File.Exists(fullPath))
+            return null;
+
+        return new FileAttachment(fullPath, fileName);
     }
 
     public static Embed HelpEmbed()
@@ -209,6 +244,35 @@ public static class GameEmbeds
                 "- Save Knockback for when opponents are near the top\n" +
                 "- Shield up when you're deep into levels 4-5\n" +
                 "- Freeze can lock someone out for a full minute", false)
+            .Build();
+    }
+
+    public static Embed RoadmapEmbed()
+    {
+        return new EmbedBuilder()
+            .WithTitle("Arcade Roadmap")
+            .WithDescription("Here's what's been built so far and what's coming next for the Arcade platform.")
+            .WithColor(Color.Gold)
+            .AddField("Completed",
+                "- 5-level tower with 3 rooms per level\n" +
+                "- Word scramble puzzles (5 difficulty tiers)\n" +
+                "- Power cards: Knockback, Shield, Spy, Freeze, Chaos, Hint\n" +
+                "- Wrong-answer penalties with cooldowns\n" +
+                "- Dynamic Discord channel/role creation\n" +
+                "- AI assistant companions (Ollama-powered)\n" +
+                "- Arcade Host role management\n" +
+                "- Race to the Top win condition", false)
+            .AddField("In Progress",
+                "- Leaderboards and stats tracking\n" +
+                "- King of the Tower mode (hold crown room for 60s)\n" +
+                "- Timed puzzle rounds", false)
+            .AddField("Planned",
+                "- Seasonal Ladder with XP, ranks, and cosmetic titles\n" +
+                "- Riddle-based and multi-answer puzzles\n" +
+                "- Hidden clues across previous channels\n" +
+                "- Per-player inventory channels\n" +
+                "- Additional Arcade games (Trivia, etc.)", false)
+            .WithFooter("Have ideas? Let the Arcade Host know!")
             .Build();
     }
 
