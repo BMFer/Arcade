@@ -42,11 +42,17 @@ Every 3 rooms cleared, you earn a random card:
 
 Players can choose an AI assistant companion that provides in-character commentary during the game. Powered by Ollama for local LLM inference.
 
-| Assistant | Personality |
-|-----------|------------|
-| Glitch | Chaotic hacker AI — sarcastic, punchy, loves exploits |
-| Whisper | Mysterious phantom — cryptic, speaks in riddles |
-| Tank | Hype coach — loud, motivational, fiercely loyal |
+<p align="center">
+  <img src="Arcade.Heist/Assets/Images/Dialogs/Dialog-SelectAssistant-Banner.001.png" alt="Choose Your Assistant" width="600" />
+</p>
+
+| Assistant | Banner | Personality |
+|-----------|--------|------------|
+| Glitch | ![Glitch](Arcade.Heist/Assets/Images/Glitch/Glitch-Banner.001.png) | Chaotic hacker AI — sarcastic, punchy, loves exploits |
+| Whisper | ![Whisper](Arcade.Heist/Assets/Images/Whisper/Whisper-Banner.001.png) | Mysterious phantom — cryptic, speaks in riddles |
+| Tank | ![Tank](Arcade.Heist/Assets/Images/Tank/Tank-Banner.001.png) | Hype coach — loud, motivational, fiercely loyal |
+
+Each assistant has multiple banner images that are randomly selected per response, giving variety to the in-game experience.
 
 ## Prerequisites
 
@@ -219,6 +225,12 @@ Arcade.sln
     ├── Program.cs                          Host setup & dependency injection
     ├── appsettings.json                    Configuration
     ├── assistants.json                     AI assistant profiles
+    ├── Assets/
+    │   └── Images/
+    │       ├── Dialogs/                    Dialog banner images (e.g. assistant selection)
+    │       ├── Glitch/                     Glitch assistant banners
+    │       ├── Whisper/                    Whisper assistant banners
+    │       └── Tank/                       Tank assistant banners
     ├── Configuration/
     │   └── HeistOptions.cs                 Game-specific settings
     ├── AI/
